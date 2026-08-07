@@ -27,9 +27,11 @@ function Test-SshInstallationNeeded {
     Write-Host "Stop sshd service"
     Stop-Service sshd
     if (Is-WindowsServer2025) {
-      # Windows Server 2025 ships a preinstalled OpenSSH that's a different, inconsistent version;
-      # replace it with our pinned MSI version below (only happens once, per $sshInstallMarkerPath).
-      return $true
+      # Windows Server 2025 ships a preinstalled OpenSSH under System32 that's a different,
+      # inconsistent version; replace it with our pinned MSI version below unless the AMI
+      # already ships that build under Program Files (baked by ami-builder's e2e images).
+      # Either way this only happens once, per $sshInstallMarkerPath.
+      return -not (Test-Path "$env:ProgramFiles\OpenSSH\sshd.exe")
     }
   } else {
     return $true
