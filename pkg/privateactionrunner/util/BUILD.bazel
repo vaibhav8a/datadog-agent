@@ -11,6 +11,7 @@ go_library(
         "jwt.go",
         "keys.go",
         "response_parser.go",
+        "stringops.go",
         "urn.go",
     ],
     importpath = "github.com/DataDog/datadog-agent/pkg/privateactionrunner/util",
