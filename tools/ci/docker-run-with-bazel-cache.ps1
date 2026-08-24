@@ -2,6 +2,15 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 Set-StrictMode -Version 3.0
 
+# Despite `FF_USE_WINDOWS_JOB_OBJECT: true` in .gitlab-ci.yml, canceled jobs may leave processes running, causing
+# the next job on the same runner to fail with: `CreateJvmOutputFile(c:\bob\server\jvm.out) failed: (error: 32):
+# The process cannot access the file because it is being used by another process.` (see CIEXE-1152). Since the
+# runner executes only one job per CI_PROJECT_DIR, remove any containers left behind before setting up directories.
+$label = "CI_PROJECT_DIR=$env:CI_PROJECT_DIR"
+docker ps -a
+$staleContainers = docker ps -aq --filter "label=$label"
+if ($staleContainers) { docker rm -fv $staleContainers }
+
 # Set a job-specific bind mount for Bazel's `outputBase` in order to:
 # 1. prevent races on `outputUserRoot\<same workspace hash>\server\jvm.out`,
 # 2. avoid heavy I/O on the container's dynamically-expanding + differencing VHDX (`sandbox.vhdx` starts at 41MB),
@@ -24,6 +33,7 @@ if (-not (($acl = Get-Acl $diskCache).Access | Where-Object { -not $_.IsInherite
     --env=BUILDBARN_ID_TOKEN `
     --env=CI `
     --env=XDG_CACHE_HOME `
+    --label="$label" `
     --mount="type=bind,src=${outputBase},dst=C:\bob" `
     --mount="type=bind,src=${env:XDG_CACHE_HOME},dst=${env:XDG_CACHE_HOME}" `
     --storage-opt=size=100GB `
