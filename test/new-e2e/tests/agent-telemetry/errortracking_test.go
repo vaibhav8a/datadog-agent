@@ -192,7 +192,7 @@ func dumpAPMTelemetryPayloadsOnFailure(t *testing.T, env *environments.Host) {
 			continue
 		}
 		for _, l := range env.Payload.Logs {
-			t.Logf("payload[%d]: agent-logs record, tags=%q", i, l.Tags)
+			t.Logf("payload[%d]: agent-logs record, tags=%q, received_at=%s", i, l.Tags, p.Timestamp.UTC().Format(time.RFC3339))
 		}
 	}
 }
@@ -340,12 +340,18 @@ func (s *errorTrackingSuite) TestDisabledByDefault() {
 	// unlike waitForLocalErrorOccurrence's post-restart truncate for recurring triggers.
 	env.RemoteHost.MustExecute("sudo truncate -s 0 /var/log/datadog/system-probe.log")
 
+	// ROOT CAUSE VALIDATION: flush BEFORE UpdateEnv so that every log the
+	// old (enabled) agent sends during shutdown and every log that arrives
+	// during the restart lands in FakeIntake AFTER this flush.  assert.Never
+	// therefore catches them deterministically, reproducing the race that
+	// caused the original flaky failure.
+	require.NoError(s.T(), s.Env().FakeIntake.Client().FlushServerAndResetAggregators())
+
 	s.UpdateEnv(awshost.Provisioner(
 		awshost.WithRunOptions(
 			ec2.WithAgentOptions(errorTrackingAgentOptions(errorTrackingDisabledConfig)...),
 		),
 	))
-	require.NoError(s.T(), s.Env().FakeIntake.Client().FlushServerAndResetAggregators())
 
 	// Core agent's check error uses a regex ("ERROR.*Error running check"),
 	// unlike the other three binaries' fixed-string messages, so it can't
@@ -368,9 +374,10 @@ func (s *errorTrackingSuite) TestDisabledByDefault() {
 		"timed out waiting for filter unmarshal error to appear in system-probe log", false)
 	triggerTraceAgentReceiverError(s.T(), env)
 
-	// Confirm nothing is forwarded. The config sets flush_interval_seconds: 1, so
-	// 5 s covers five flush cycles: if a regression enabled the forwarder, it would
-	// flush within this window and the assertion would catch it.
+	// ROOT CAUSE VALIDATION: with the flush placed before UpdateEnv, the
+	// shutdown-drain logs from the old enabled agent are guaranteed to be in
+	// FakeIntake by now. assert.Never must fail here — if it passes the
+	// hypothesis is wrong.
 	assert.Never(s.T(), func() bool {
 		logs, err := s.Env().FakeIntake.Client().GetAgentTelemetryLogs()
 		require.NoError(s.T(), err)
