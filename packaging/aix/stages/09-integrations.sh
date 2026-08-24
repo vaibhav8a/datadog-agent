@@ -126,10 +126,53 @@ log "Discovered Python checks tagged Supported OS::AIX: $PYTHON_CHECKS"
 for check in $PYTHON_CHECKS; do
     CHECK_DIR="$INTEGRATIONS_CORE/$check"
     log "Installing check: $check"
+
+    # Install the check with its [deps] extra so each check's runtime
+    # dependencies are installed alongside it, mirroring the integrations-core
+    # lockfile flow used on Linux/macOS/Windows (where each check's [deps] extra
+    # is part of the resolved wheel set). Native deps that Stage 06 already
+    # built and pinned (pymqi, lxml, psutil, cryptography) are seen as satisfied
+    # by --constraint and are not rebuilt; only missing pure-Python deps (e.g.
+    # http_check's pysocks/requests-ntlm) are fetched from PyPI.
+    #
+    # Native C-extension deps that Stage 06 did NOT build (e.g. pyodbc when
+    # unixODBC headers are absent) are filtered out so the check still installs —
+    # the check code surfaces a clear ImportError at runtime if the missing
+    # extension is needed, matching the graceful-degradation behavior below for
+    # the IBM checks.
+    DEPS_FILE="$BUILD_DIR/.09-deps-$check.tmp"
+    python3.12 - "$CHECK_DIR" "$STAGING/constraints.txt" "$DEPS_FILE" <<'PYEOF'
+import sys, tomllib
+check_dir, constraints, out = sys.argv[1:4]
+# Native C extensions Stage 06 builds conditionally on host prerequisites.
+# If absent from the frozen constraints (i.e. not built), skip them rather
+# than fail the install with a source build that cannot succeed.
+NATIVE_OPTIONAL = {"pyodbc"}
+with open(f"{check_dir}/pyproject.toml", "rb") as f:
+    t = tomllib.load(f)
+deps = t.get("project", {}).get("optional-dependencies", {}).get("deps", [])
+installed = set()
+with open(constraints) as f:
+    for line in f:
+        name = line.split("==", 1)[0].split(";", 1)[0].strip().lower()
+        if name:
+            installed.add(name)
+with open(out, "w") as w:
+    for d in deps:
+        name = d.split("==", 1)[0].split(";", 1)[0].strip().lower()
+        if name in NATIVE_OPTIONAL and name not in installed:
+            print(f"# skipped (native, not built): {d}", file=sys.stderr)
+            continue
+        w.write(d + "\n")
+PYEOF
+
     $PIP install \
         --constraint "$STAGING/constraints.txt" \
         --find-links "$WHEEL_CACHE" \
+        -r "$DEPS_FILE" \
         "$CHECK_DIR"
+    rm -f "$DEPS_FILE"
+
     mkdir -p "$STAGING/etc/datadog-agent/conf.d/${check}.d"
     EXAMPLE="$CHECK_DIR/datadog_checks/$check/data/conf.yaml.example"
     if [ -f "$EXAMPLE" ]; then
