@@ -430,9 +430,10 @@ type RuntimeSecurityConfig struct {
 	// default_value: 500
 	EventSamplingOpenRate int
 
-	// description:
+	// description: EventSamplingOpenThreshold defines the ring buffer pressure percentage below which open events are always admitted when dynamic sampling is enabled
 	// visibility: private
-	// default_value:
+	// default_value: 80
+
 	EventSamplingOpenThreshold int
 	// description: EventSamplingConnectEnabled defines if the agent should sample connect events
 	// visibility: private
@@ -444,7 +445,11 @@ type RuntimeSecurityConfig struct {
 	// default_value: 500
 	EventSamplingConnectRate int
 
+	// description: EventSamplingConnectThreshold defines the ring buffer pressure percentage below which connect events are always admitted when dynamic sampling is enabled
+	// visibility: private
+	// default_value: 40
 	EventSamplingConnectThreshold int
+
 	// description: EventSamplingBindEnabled defines if the agent should sample bind events
 	// visibility: private
 	// default_value: false
@@ -455,7 +460,11 @@ type RuntimeSecurityConfig struct {
 	// default_value: 500
 	EventSamplingBindRate int
 
+	// description: EventSamplingBindThreshold defines the ring buffer pressure percentage below which bind events are always admitted when dynamic sampling is enabled
+	// visibility: private
+	// default_value: 60
 	EventSamplingBindThreshold int
+
 	// description: EventSamplingDNSEnabled defines if the agent should sample DNS events
 	// visibility: private
 	// default_value: false
@@ -464,8 +473,16 @@ type RuntimeSecurityConfig struct {
 	// description: EventSamplingDNSRate defines the rate at which the agent should sample DNS events
 	// visibility: private
 	// default_value: 500
-	EventSamplingDNSRate        int
-	EventSamplingDNSThreshold   int
+	EventSamplingDNSRate int
+
+	// description: EventSamplingDNSThreshold defines the ring buffer pressure percentage below which DNS events are always admitted when dynamic sampling is enabled
+	// visibility: private
+	// default_value: 60
+	EventSamplingDNSThreshold int
+
+	// description: EventSamplingDynamicEnabled defines if event sampling should adapt based on ring buffer pressure
+	// visibility: private
+	// default_value: false
 	EventSamplingDynamicEnabled bool
 
 	// description: SecurityProfileEnabled defines if the Security Profile manager should be enabled
@@ -740,8 +757,8 @@ type RuntimeSecurityConfig struct {
 	EnforcementRawSyscallEnabled bool
 
 	// description: EnforcementCgroupKillEnabled defines if a kill action scoped to a container or a cgroup may kill the whole cgroup at once, instead of signalling each of its processes
-	// visiiblity: private
-	// default_value:
+	// visibility: private
+	// default_value: true
 	EnforcementCgroupKillEnabled bool
 
 	// description: EnforcementBinaryExcluded defines the list of binaries that are excluded from the enforcement
